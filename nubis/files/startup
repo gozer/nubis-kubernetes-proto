@@ -1,0 +1,203 @@
+#!/bin/bash
+
+BUCKET=kubernetes-stage-kops-92a9a700b4beb81fc33e89462eb95ef8b4c9197d
+CLUSTER=k8s.core.us-west-2.nubis-gozer.nubis.allizom.org
+AZ=$(nubis-availability-zone)
+
+NUBIS_PURPOSE=$(nubis-metadata NUBIS_PURPOSE)
+
+if [ "$NUBIS_PURPOSE" == "master" ]; then
+  IGNAME="master-$AZ"
+  KUBE_ENV_TAGS="- _kubernetes_master"
+else
+  IGNAME="nodes"
+  KUBE_ENV_TAGS=""
+fi
+
+cat <<EOF > /var/cache/kubernetes-install/kube_env.yaml
+Assets:
+- 125993c220d1a9b5b60ad20a867a0e7cda63e64c@https://storage.googleapis.com/kubernetes-release/release/v1.8.4/bin/linux/amd64/kubelet
+- 8e2314db816b9b4465c5f713c1152cb0603db15e@https://storage.googleapis.com/kubernetes-release/release/v1.8.4/bin/linux/amd64/kubectl
+- 1d9788b0f5420e1a219aad2cb8681823fc515e7c@https://storage.googleapis.com/kubernetes-release/network-plugins/cni-0799f5732f2a11b329d9e3d51b9c8f2e3759f2ff.tar.gz
+- f62360d3351bed837ae3ffcdee65e9d57511695a@https://kubeupv2.s3.amazonaws.com/kops/1.8.0/linux/amd64/utils.tar.gz
+ClusterName: $CLUSTER
+ConfigBase: s3://$BUCKET
+InstanceGroupName: $IGNAME
+Tags:
+- _automatic_upgrades
+- _aws
+- _networking_cni
+$KUBE_ENV_TAGS
+channels:
+- s3://$BUCKET/addons/bootstrap-channel.yaml
+protokubeImage:
+  hash: 1b972e92520b3cafd576893ae3daeafdd1bc9ffd
+  name: protokube:1.8.0
+  source: https://kubeupv2.s3.amazonaws.com/kops/1.8.0/images/protokube.tar.gz
+EOF
+
+if [ "$NUBIS_PURPOSE" == "master" ]; then
+cat <<EOF > /var/cache/kubernetes-install/cluster_spec.yaml
+cloudConfig: null
+docker:
+  bridge: ""
+  ipMasq: false
+  ipTables: false
+  logDriver: json-file
+  logLevel: warn
+  logOpt:
+  - max-size=10m
+  - max-file=5
+  storage: overlay,aufs
+  version: 1.13.1
+encryptionConfig: null
+kubeAPIServer:
+  address: 127.0.0.1
+  admissionControl:
+  - Initializers
+  - NamespaceLifecycle
+  - LimitRanger
+  - ServiceAccount
+  - PersistentVolumeLabel
+  - DefaultStorageClass
+  - DefaultTolerationSeconds
+  - NodeRestriction
+  - Priority
+  - ResourceQuota
+  allowPrivileged: true
+  anonymousAuth: false
+  apiServerCount: 3
+  authorizationMode: RBAC
+  cloudProvider: aws
+  etcdServers:
+  - http://127.0.0.1:4001
+  etcdServersOverrides:
+  - /events#http://127.0.0.1:4002
+  image: gcr.io/google_containers/kube-apiserver:v1.8.4
+  insecurePort: 8080
+  kubeletPreferredAddressTypes:
+  - InternalIP
+  - Hostname
+  - ExternalIP
+  logLevel: 2
+  requestheaderAllowedNames:
+  - aggregator
+  requestheaderExtraHeaderPrefixes:
+  - X-Remote-Extra-
+  requestheaderGroupHeaders:
+  - X-Remote-Group
+  requestheaderUsernameHeaders:
+  - X-Remote-User
+  securePort: 443
+  serviceClusterIPRange: 100.64.0.0/13
+  storageBackend: etcd2
+kubeControllerManager:
+  allocateNodeCIDRs: true
+  attachDetachReconcileSyncPeriod: 1m0s
+  cloudProvider: aws
+  clusterCIDR: 100.96.0.0/11
+  clusterName: $CLUSTER
+  configureCloudRoutes: false
+  image: gcr.io/google_containers/kube-controller-manager:v1.8.4
+  leaderElection:
+    leaderElect: true
+  logLevel: 2
+  useServiceAccountCredentials: true
+kubeProxy:
+  clusterCIDR: 100.96.0.0/11
+  cpuRequest: 100m
+  featureGates: null
+  hostnameOverride: '@aws'
+  image: gcr.io/google_containers/kube-proxy:v1.8.4
+  logLevel: 2
+kubeScheduler:
+  image: gcr.io/google_containers/kube-scheduler:v1.8.4
+  leaderElection:
+    leaderElect: true
+  logLevel: 2
+kubelet:
+  allowPrivileged: true
+  cgroupRoot: /
+  cloudProvider: aws
+  clusterDNS: 100.64.0.10
+  clusterDomain: cluster.local
+  enableDebuggingHandlers: true
+  evictionHard: memory.available<100Mi,nodefs.available<10%,nodefs.inodesFree<5%,imagefs.available<10%,imagefs.inodesFree<5%
+  featureGates:
+    ExperimentalCriticalPodAnnotation: "true"
+  hostnameOverride: '@aws'
+  kubeconfigPath: /var/lib/kubelet/kubeconfig
+  logLevel: 2
+  networkPluginName: cni
+  nonMasqueradeCIDR: 100.64.0.0/10
+  podInfraContainerImage: gcr.io/google_containers/pause-amd64:3.0
+  podManifestPath: /etc/kubernetes/manifests
+  requireKubeconfig: true
+masterKubelet:
+  allowPrivileged: true
+  cgroupRoot: /
+  cloudProvider: aws
+  clusterDNS: 100.64.0.10
+  clusterDomain: cluster.local
+  enableDebuggingHandlers: true
+  evictionHard: memory.available<100Mi,nodefs.available<10%,nodefs.inodesFree<5%,imagefs.available<10%,imagefs.inodesFree<5%
+  featureGates:
+    ExperimentalCriticalPodAnnotation: "true"
+  hostnameOverride: '@aws'
+  kubeconfigPath: /var/lib/kubelet/kubeconfig
+  logLevel: 2
+  networkPluginName: cni
+  nonMasqueradeCIDR: 100.64.0.0/10
+  podInfraContainerImage: gcr.io/google_containers/pause-amd64:3.0
+  podManifestPath: /etc/kubernetes/manifests
+  registerSchedulable: false
+  requireKubeconfig: true
+EOF
+else
+cat <<EOF > /var/cache/kubernetes-install/cluster_spec.yaml
+cloudConfig: null
+docker:
+  bridge: ""
+  ipMasq: false
+  ipTables: false
+  logDriver: json-file
+  logLevel: warn
+  logOpt:
+  - max-size=10m
+  - max-file=5
+  storage: overlay,aufs
+  version: 1.13.1
+kubeProxy:
+  clusterCIDR: 100.96.0.0/11
+  cpuRequest: 100m
+  featureGates: null
+  hostnameOverride: '@aws'
+  image: gcr.io/google_containers/kube-proxy:v1.8.4
+  logLevel: 2
+kubelet:
+  allowPrivileged: true
+  cgroupRoot: /
+  cloudProvider: aws
+  clusterDNS: 100.64.0.10
+  clusterDomain: cluster.local
+  enableDebuggingHandlers: true
+  evictionHard: memory.available<100Mi,nodefs.available<10%,nodefs.inodesFree<5%,imagefs.available<10%,imagefs.inodesFree<5%
+  featureGates:
+    ExperimentalCriticalPodAnnotation: "true"
+  hostnameOverride: '@aws'
+  kubeconfigPath: /var/lib/kubelet/kubeconfig
+  logLevel: 2
+  networkPluginName: cni
+  nonMasqueradeCIDR: 100.64.0.0/10
+  podInfraContainerImage: gcr.io/google_containers/pause-amd64:3.0
+  podManifestPath: /etc/kubernetes/manifests
+  requireKubeconfig: true
+EOF
+fi
+
+cat <<EOF > /var/cache/kubernetes-install/ig_spec.yaml
+kubelet: null
+nodeLabels:
+  kops.k8s.io/instancegroup: $IGNAME
+taints: null
+EOF

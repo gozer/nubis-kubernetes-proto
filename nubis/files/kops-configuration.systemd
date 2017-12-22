@@ -1,0 +1,11 @@
+[Unit]
+Description=Run kops bootstrap (nodeup)
+Documentation=https://github.com/kubernetes/kops
+
+[Service]
+EnvironmentFile=/etc/environment
+ExecStart=/usr/local/bin/nodeup --conf /var/cache/kubernetes-install/kube_env.yaml --v=8
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target
