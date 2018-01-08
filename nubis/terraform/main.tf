@@ -329,6 +329,44 @@ resource "aws_security_group_rule" "jumphost-to-nodes-ssh" {
   protocol                 = "tcp"
 }
 
+data "template_file" "config" {
+  template = "${file("${path.module}/data/config")}"
+
+  vars {
+    BUCKET             = "${module.kops.name}"
+    CLUSTER            = "k8s.${var.arena}.${module.info.hosted_zone_name}"
+    AVAILABILITY_ZONES = "${join(",",data.aws_availability_zones.available.names)}"
+    ZONE_ID            = "${module.info.hosted_zone_id}"
+    NETWORK_CIDR       = "${module.info.network_cidr}"
+  }
+}
+
+data "template_file" "cluster_spec" {
+  template = "${file("${path.module}/data/cluster.spec")}"
+
+  vars {
+    BUCKET             = "${module.kops.name}"
+    CLUSTER            = "k8s.${var.arena}.${module.info.hosted_zone_name}"
+    AVAILABILITY_ZONES = "${join(",",data.aws_availability_zones.available.names)}"
+    ZONE_ID            = "${module.info.hosted_zone_id}"
+    NETWORK_CIDR       = "${module.info.network_cidr}"
+  }
+}
+
+resource "aws_s3_bucket_object" "config" {
+  bucket  = "${module.kops.name}"
+  key     = "config"
+  content = "${data.template_file.config.rendered}"
+  etag    = "${md5(data.template_file.config.rendered)}"
+}
+
+resource "aws_s3_bucket_object" "cluster_spec" {
+  bucket  = "${module.kops.name}"
+  key     = "cluster.spec"
+  content = "${data.template_file.cluster_spec.rendered}"
+  etag    = "${md5(data.template_file.cluster_spec.rendered)}"
+}
+
 resource "aws_iam_role_policy" "kops" {
   name   = "kops"
   role   = "${module.worker.role}"
